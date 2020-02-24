@@ -154,6 +154,7 @@ aqo_planner(Query *parse,
 				query_context.auto_tuning = true;
 				query_context.collect_stat = true;
 				break;
+
 			case AQO_MODE_FORCED:
 				query_context.adding_query = false;
 				query_context.learn_aqo = true;
@@ -162,6 +163,7 @@ aqo_planner(Query *parse,
 				query_context.fspace_hash = 0;
 				query_context.collect_stat = false;
 				break;
+
 			case AQO_MODE_CONTROLLED:
 			case AQO_MODE_FROZEN:
 				/*
@@ -174,18 +176,24 @@ aqo_planner(Query *parse,
 				query_context.auto_tuning = false;
 				query_context.collect_stat = false;
 				break;
+
 			case AQO_MODE_LEARN:
 				query_context.adding_query = true;
 				query_context.learn_aqo = true;
 				query_context.use_aqo = true;
-				query_context.fspace_hash = query_context.query_hash;
+
+				query_context.fspace_hash = (use_common_space) ? 0 :
+													query_context.query_hash;
+
 				query_context.auto_tuning = false;
 				query_context.collect_stat = true;
 				break;
+
 			case AQO_MODE_DISABLED:
 				/* Should never happen */
 				query_context.fspace_hash = query_context.query_hash;
 				break;
+
 			default:
 				elog(ERROR, "unrecognized mode in AQO: %d", aqo_mode);
 				break;
@@ -201,6 +209,7 @@ aqo_planner(Query *parse,
 	}
 	else
 	{
+		/* The query class data contains in the MLKB. */
 		query_context.adding_query = false;
 		query_context.learn_aqo = DatumGetBool(query_params[1]);
 		query_context.use_aqo = DatumGetBool(query_params[2]);
@@ -234,7 +243,10 @@ aqo_planner(Query *parse,
 			 * suppressed manually) and collect stats.
 			 */
 			query_context.collect_stat = true;
-			query_context.fspace_hash = query_context.query_hash;
+
+			query_context.fspace_hash = (use_common_space) ? 0 :
+													query_context.query_hash;
+
 			break;
 
 		case AQO_MODE_INTELLIGENT:

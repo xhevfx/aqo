@@ -173,6 +173,8 @@ typedef enum
 
 extern int	aqo_mode;
 extern bool	force_collect_stat;
+extern double sel_trust_factor;
+extern bool use_common_space;
 
 /*
  * It is mostly needed for auto tuning of query. with auto tuning mode aqo

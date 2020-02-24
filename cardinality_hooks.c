@@ -305,11 +305,13 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	else
 	{
 		rel->predicted_cardinality = -1;
+
 		call_default_set_joinrel_size_estimates(root, rel,
 												outer_rel,
 												inner_rel,
 												sjinfo,
 												restrictlist);
+		rel->rows = rel->rows * sel_trust_factor;
 	}
 }
 
@@ -370,9 +372,12 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	if (predicted >= 0)
 		return predicted;
 	else
-		return call_default_get_parameterized_joinrel_size(root, rel,
+	{
+		predicted = call_default_get_parameterized_joinrel_size(root, rel,
 														   outer_path,
 														   inner_path,
 														   sjinfo,
 														   restrict_clauses);
+		return predicted * sel_trust_factor;
+	}
 }

@@ -8,6 +8,8 @@ void _PG_init(void);
 /* Strategy of determining feature space for new queries. */
 int		aqo_mode;
 bool	force_collect_stat;
+double	sel_trust_factor;
+bool	use_common_space;
 
 /* GUC variables */
 static const struct config_enum_entry format_options[] = {
@@ -92,10 +94,10 @@ _PG_init(void)
 							 0,
 							 NULL,
 							 NULL,
-							 NULL);
+							 NULL
+	);
 
-	DefineCustomBoolVariable(
-							 "aqo.force_collect_stat",
+	DefineCustomBoolVariable("aqo.force_collect_stat",
 							 "Collect statistics at all AQO modes",
 							 NULL,
 							 &force_collect_stat,
@@ -105,7 +107,33 @@ _PG_init(void)
 							 NULL,
 							 NULL,
 							 NULL
-		);
+	);
+
+	DefineCustomRealVariable("aqo.sel_trust_factor",
+							 "The 'Trust' coefficient for postgres planner native cardinality estimation",
+							 "If we haven't AQO estimation for the node, we will multiply planner estimation by this factor",
+							 &sel_trust_factor,
+							 1,
+							 1.0E-6,
+							 1.0E+6,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
+
+	DefineCustomBoolVariable("aqo.use_common_space",
+							 "Use cross-query learning data for each plan node",
+							 NULL,
+							 &use_common_space,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
 
 	prev_planner_hook							= planner_hook;
 	planner_hook								= aqo_planner;
