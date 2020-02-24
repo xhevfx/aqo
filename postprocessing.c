@@ -511,7 +511,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		if (!query_context.adding_query && query_context.auto_tuning)
 			automatical_query_tuning(query_context.query_hash, stat);
 
-		update_aqo_stat(query_context.fspace_hash, stat);
+		update_aqo_stat(query_context.query_hash, stat);
 		pfree_query_stat(stat);
 	}
 	RemoveFromQueryContext(queryDesc);
