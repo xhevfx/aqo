@@ -1,4 +1,6 @@
 #include "aqo.h"
+#include "assumptions.h"
+
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
 #include "utils/queryenvironment.h"
@@ -323,6 +325,9 @@ learnOnPlanState(PlanState *p, void *context)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
 								p->plan->path_relids, learn_rows, predicted);
 		}
+
+		/* Remove the assumption because know we have actual cardinality. */
+		drop_assumption(query_context.fspace_hash, p->plan->fss_hash);
 	}
 
 	ctx->clauselist = list_concat(ctx->clauselist, SubplanCtx.clauselist);
@@ -626,6 +631,16 @@ calculateJoinNum(PlanState *ps, void *context)
 		nodeTag(ps->plan) == T_MergeJoin ||
 		nodeTag(ps->plan) == T_HashJoin)
 		(*njoins_ptr)++;
+
+
+	{
+		Assumption *value;
+
+		value = get_assumption(query_context.fspace_hash, ps->plan->fss_hash);
+
+		if (value)
+			value->inPlan = true;
+	}
 
 	return false;
 }

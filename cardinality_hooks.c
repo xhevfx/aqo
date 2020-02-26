@@ -1,5 +1,7 @@
 #include "aqo.h"
 
+#include "assumptions.h"
+
 /*****************************************************************************
  *
  *	CARDINALITY ESTIMATION HOOKS
@@ -306,12 +308,15 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	{
 		rel->predicted_cardinality = -1;
 
+		/*
+		 * Need to do assumption
+		 */
 		call_default_set_joinrel_size_estimates(root, rel,
-												outer_rel,
-												inner_rel,
-												sjinfo,
-												restrictlist);
-		rel->rows = rel->rows * sel_trust_factor;
+																outer_rel,
+																inner_rel,
+																sjinfo,
+																restrictlist);
+		rel->rows = do_assumption(query_context.fspace_hash, fss, rel->rows);
 	}
 }
 
@@ -373,11 +378,15 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 		return predicted;
 	else
 	{
+		/*
+		 * Need to do assumption
+		 */
 		predicted = call_default_get_parameterized_joinrel_size(root, rel,
-														   outer_path,
-														   inner_path,
-														   sjinfo,
-														   restrict_clauses);
-		return predicted * sel_trust_factor;
+														outer_path,
+														inner_path,
+														sjinfo,
+														restrict_clauses);
+
+		return do_assumption(query_context.fspace_hash, fss, predicted);
 	}
 }

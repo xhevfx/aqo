@@ -1,5 +1,9 @@
 #include "aqo.h"
 
+#include "assumptions.h"
+#include "funcapi.h"
+#include "miscadmin.h"
+
 PG_MODULE_MAGIC;
 
 void _PG_init(void);
@@ -163,7 +167,38 @@ _PG_init(void)
 											 ALLOCSET_DEFAULT_SIZES);
 }
 
+PG_FUNCTION_INFO_V1(aqo_show_assumptions);
 PG_FUNCTION_INFO_V1(invalidate_deactivated_queries_cache);
+
+
+/*
+ * Show AQO assumptions info from the hash table.
+ */
+Datum
+aqo_show_assumptions(PG_FUNCTION_ARGS)
+{
+	TupleDesc	tupdesc;
+	Tuplestorestate *tupstore;
+	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+	MemoryContext per_query_ctx;
+	MemoryContext oldcontext;
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "return type must be a row type");
+
+	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+	oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+	tupstore = tuplestore_begin_heap(true, false, work_mem);
+	rsinfo->returnMode = SFRM_Materialize;
+	rsinfo->setResult = tupstore;
+	rsinfo->setDesc = tupdesc;
+	MemoryContextSwitchTo(oldcontext);
+	store_assumptions(tupstore, tupdesc);
+
+	return (Datum) 0;
+}
 
 /*
  * Clears the cache of deactivated queries if the user changed aqo_queries
