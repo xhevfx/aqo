@@ -201,6 +201,18 @@ HasNeverExecutedNodes(PlanState *ps, void *context)
 
 	return planstate_tree_walker(ps, HasNeverExecutedNodes, NULL);
 }
+
+static bool
+DropUsedAssumptions(PlanState *ps, void *context)
+{
+	Assert(context == NULL);
+
+	/* Remove the assumption because know we have actual cardinality. */
+	drop_assumption(query_context.fspace_hash, ps->plan->fss_hash);
+
+	return planstate_tree_walker(ps, DropUsedAssumptions, NULL);
+}
+
 /*
  * Walks over obtained PlanState tree, collects relation objects with their
  * clauses, selectivities and relids and passes each object to learn_sample.
@@ -211,6 +223,8 @@ HasNeverExecutedNodes(PlanState *ps, void *context)
  * We use list_copy() of p->plan->path_clauses and p->plan->path_relids
  * because the plan may be stored in the cache after this. Operation
  * list_concat() changes input lists and may destruct cached plan.
+ *
+ * Attention: We learn only on nodes that had been executed.
  */
 static bool
 learnOnPlanState(PlanState *p, void *context)
@@ -325,9 +339,6 @@ learnOnPlanState(PlanState *p, void *context)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
 								p->plan->path_relids, learn_rows, predicted);
 		}
-
-		/* Remove the assumption because know we have actual cardinality. */
-		drop_assumption(query_context.fspace_hash, p->plan->fss_hash);
 	}
 
 	ctx->clauselist = list_concat(ctx->clauselist, SubplanCtx.clauselist);
@@ -456,6 +467,11 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		query_context.learn_aqo = false;
 		query_context.collect_stat = false;
 	}
+
+	DropUsedAssumptions(queryDesc->planstate, NULL);
+
+	if (!queryDesc->planstate->instrument)
+		goto end;
 
 	if ((query_context.learn_aqo || query_context.collect_stat) &&
 		!HasNeverExecutedNodes(queryDesc->planstate, NULL))
