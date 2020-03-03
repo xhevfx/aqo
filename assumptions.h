@@ -24,6 +24,6 @@ typedef struct
 extern double do_assumption(int space, int hash, double rows);
 extern void store_assumptions(Tuplestorestate *tupstore, TupleDesc tupdesc);
 extern Assumption *get_assumption(int space, int hash);
-extern void drop_assumption(int space, int hash);
+extern bool drop_assumption(int space, int hash);
 
 #endif /* CONTRIB_AQO_ASSUMPTIONS_H_ */

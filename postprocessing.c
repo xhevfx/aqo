@@ -205,12 +205,13 @@ HasNeverExecutedNodes(PlanState *ps, void *context)
 static bool
 DropUsedAssumptions(PlanState *ps, void *context)
 {
-	Assert(context == NULL);
+	Assert(context != NULL);
 
 	/* Remove the assumption because know we have actual cardinality. */
-	drop_assumption(query_context.fspace_hash, ps->plan->fss_hash);
+	if (drop_assumption(query_context.fspace_hash, ps->plan->fss_hash))
+		(*((int *) context))++;
 
-	return planstate_tree_walker(ps, DropUsedAssumptions, NULL);
+	return planstate_tree_walker(ps, DropUsedAssumptions, context);
 }
 
 /*
@@ -468,7 +469,7 @@ aqo_ExecutorEnd(QueryDesc *queryDesc)
 		query_context.collect_stat = false;
 	}
 
-	DropUsedAssumptions(queryDesc->planstate, NULL);
+	DropUsedAssumptions(queryDesc->planstate, &query_context.nassumptions);
 
 	if (!queryDesc->planstate->instrument)
 		goto end;
@@ -771,7 +772,7 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 		}
 
 		/*
-		 * Query hash provides an user the conveniently use of the AQO
+		 * Query hash provides to an user the conveniently use of the AQO
 		 * auxiliary functions.
 		 */
 		if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
@@ -779,6 +780,7 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 			ExplainPropertyInteger("Query hash", NULL,
 												query_context.query_hash, es);
 			ExplainPropertyInteger("JOINS", NULL, njoins, es);
+			ExplainPropertyInteger("nassumptions", NULL, query_context.nassumptions, es);
 		}
 	}
 #endif

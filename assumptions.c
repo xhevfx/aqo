@@ -20,9 +20,6 @@ do_assumption(int space, int hash, double rows)
 {
 	Assumption *value;
 
-	if (aqo_mode == AQO_MODE_FROZEN)
-		return rows;
-
 	Assert(aqo_mode != AQO_MODE_DISABLED);
 
 	if (htab == NULL)
@@ -40,7 +37,11 @@ do_assumption(int space, int hash, double rows)
 	{
 		AssumptionKey key = {space, hash};
 
+		if (aqo_mode == AQO_MODE_FROZEN)
+			return rows;
+
 		Assert(key.hash != 0);
+
 		value = (Assumption *) hash_search(htab, (void *) &key, HASH_ENTER, NULL);
 		value->inPlan = false;
 		value->cardinality = clamp_row_est(rows * sel_trust_factor);
@@ -51,14 +52,14 @@ do_assumption(int space, int hash, double rows)
 		/* Previous assumption wasn't verified during learning stage. */
 		value->cardinality = clamp_row_est(value->cardinality * 10.);
 		value->inPlan = false;
-		elog(WARNING, "USE INPLAN ASSUMPTION: %d/%d", hash, value->counter);
+//		elog(WARNING, "USE INPLAN ASSUMPTION: %d/%d", hash, value->counter);
 	}
 	else
 	{
 		/*
 		 * The assumption wasn't used in any plan. We can use it repeatedly
 		 */
-		elog(WARNING, "USE ASSUMPTION: %d/%d", hash, value->counter);
+//		elog(WARNING, "USE ASSUMPTION: %d/%d", hash, value->counter);
 	}
 
 	value->planner_estimation = rows;
@@ -109,13 +110,19 @@ get_assumption(int space, int hash)
 	return (Assumption *) hash_search(htab, (void *) &key, HASH_FIND, NULL);
 }
 
-void
+bool
 drop_assumption(int space, int hash)
 {
 	AssumptionKey key = {space, hash};
+	bool found;
 
 	if (htab == NULL)
-		return;
+		return false;
 
-	(void *) hash_search(htab, (void *) &key, HASH_REMOVE, NULL);
+	found =  (hash_search(htab, (void *) &key, HASH_FIND, NULL) != NULL);
+
+	if (found)
+		(void *) hash_search(htab, (void *) &key, HASH_REMOVE, NULL);
+
+	return found;
 }

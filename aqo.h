@@ -217,6 +217,9 @@ typedef struct QueryContextData
 	/* Query execution time */
 	instr_time	query_starttime;
 	double		query_planning_time;
+
+	/* Initializes in ExecutorEnd hook */
+	int nassumptions;
 } QueryContextData;
 
 extern double predicted_ppi_rows;
