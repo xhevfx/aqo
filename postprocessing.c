@@ -41,7 +41,8 @@ static void learn_sample(List *clauselist,
 			 List *selectivities,
 			 List *relidslist,
 			 double true_cardinality,
-			 double predicted_cardinality);
+			 double predicted_cardinality,
+			 int plan_fss);
 static List *restore_selectivities(List *clauselist,
 					  List *relidslist,
 					  JoinType join_type,
@@ -83,7 +84,7 @@ atomic_fss_learn_step(int fss_hash, int ncols,
  */
 static void
 learn_sample(List *clauselist, List *selectivities, List *relidslist,
-			 double true_cardinality, double predicted_cardinality)
+			 double true_cardinality, double predicted_cardinality, int plan_fss)
 {
 	int			fss_hash;
 	int			nfeatures;
@@ -105,7 +106,7 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 
 	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
 					   &nfeatures, &features);
-
+	Assert(fss_hash == plan_fss);
 	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)
 			matrix[i] = palloc(sizeof(double) * nfeatures);
@@ -215,6 +216,32 @@ DropUsedAssumptions(PlanState *ps, void *context)
 }
 
 /*
+ * The node can't change cardinality. It can cause duplicated clauses in the
+ * clauselist.
+ */
+static bool
+IgnoreNode(int type)
+{
+	switch (type)
+	{
+	case T_Unique:
+	case T_Gather:
+	case T_Material:
+	case T_Agg:
+	case T_Sort:
+	case T_Group:
+	case T_WindowAgg:
+	case T_SetOp:
+	case T_LockRows:
+	case T_Limit:
+	case T_Result: // XXX
+		return true;
+	default:
+		return false;
+	}
+}
+
+/*
  * Walks over obtained PlanState tree, collects relation objects with their
  * clauses, selectivities and relids and passes each object to learn_sample.
  *
@@ -236,10 +263,10 @@ learnOnPlanState(PlanState *p, void *context)
 	planstate_tree_walker(p, learnOnPlanState, (void *) &SubplanCtx);
 
 	/*
-	 * Some nodes inserts after planning step (See T_Hash node type).
+	 * Some nodes inserts after planning step (See T_Hash, T_Sort node types).
 	 * In this case we have'nt AQO prediction and fss record.
 	 */
-	if (p->plan->had_path)
+	if (p->plan->had_path && !IgnoreNode(nodeTag(p->plan)))
 	{
 		List *cur_selectivities;
 
@@ -338,7 +365,8 @@ learnOnPlanState(PlanState *p, void *context)
 
 			if (ctx->learn)
 				learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
-								p->plan->path_relids, learn_rows, predicted);
+							 p->plan->path_relids, learn_rows, predicted,
+							 p->plan->fss_hash);
 		}
 	}
 
