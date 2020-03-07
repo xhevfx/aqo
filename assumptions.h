@@ -21,6 +21,8 @@ typedef struct
 	bool inPlan;
 } Assumption;
 
+extern bool use_assumptions;
+
 extern double do_assumption(int space, int hash, double rows);
 extern void store_assumptions(Tuplestorestate *tupstore, TupleDesc tupdesc);
 extern Assumption *get_assumption(int space, int hash);

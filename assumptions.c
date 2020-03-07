@@ -12,6 +12,9 @@
 #include "aqo.h"
 #include "assumptions.h"
 
+
+bool use_assumptions = false;
+
 static HTAB *htab = NULL;
 static HASHCTL info;
 
@@ -19,6 +22,9 @@ double
 do_assumption(int space, int hash, double rows)
 {
 	Assumption *value;
+
+	if (!use_assumptions)
+		return rows;
 
 	Assert(aqo_mode != AQO_MODE_DISABLED);
 
@@ -52,14 +58,12 @@ do_assumption(int space, int hash, double rows)
 		/* Previous assumption wasn't verified during learning stage. */
 		value->cardinality = clamp_row_est(value->cardinality * 10.);
 		value->inPlan = false;
-//		elog(WARNING, "USE INPLAN ASSUMPTION: %d/%d", hash, value->counter);
 	}
 	else
 	{
 		/*
 		 * The assumption wasn't used in any plan. We can use it repeatedly
 		 */
-//		elog(WARNING, "USE ASSUMPTION: %d/%d", hash, value->counter);
 	}
 
 	value->planner_estimation = rows;

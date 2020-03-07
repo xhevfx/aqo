@@ -139,6 +139,18 @@ _PG_init(void)
 							 NULL
 	);
 
+	DefineCustomBoolVariable("aqo.use_assumptions",
+							 "Use assumptions",
+							 NULL,
+							 &use_assumptions,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL
+	);
+
 	prev_planner_hook							= planner_hook;
 	planner_hook								= aqo_planner;
 	prev_post_parse_analyze_hook				= post_parse_analyze_hook;

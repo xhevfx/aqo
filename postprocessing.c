@@ -104,9 +104,18 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 */
 	target = log(true_cardinality);
 
+	/*
+	 * We don't use plan->fss_hash value here. fss_hash was created during path
+	 * generation procedure. After this planner can change plan with any special
+	 * rules or optimizations. And Now we will use lists of clauses and
+	 * selectivities was built by the really executed plan.
+	 */
 	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
 					   &nfeatures, &features);
+
+	/* For debug purposes only. */
 	Assert(fss_hash == plan_fss);
+
 	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)
 			matrix[i] = palloc(sizeof(double) * nfeatures);
