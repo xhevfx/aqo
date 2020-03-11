@@ -1,4 +1,6 @@
 #include "aqo.h"
+#include "hash.h"
+
 #include "optimizer/optimizer.h"
 
 /*****************************************************************************
@@ -14,7 +16,7 @@
  * General method for prediction the cardinality of given relation.
  */
 double
-predict_for_relation(List *restrict_clauses, List *selectivities,
+predict_for_relation(List *clauses, List *selectivities,
 					 List *relids, int *fss_hash)
 {
 	int		nfeatures;
@@ -25,7 +27,7 @@ predict_for_relation(List *restrict_clauses, List *selectivities,
 	int		rows;
 	int		i;
 
-	*fss_hash = get_fss_for_object(restrict_clauses, selectivities, relids,
+	*fss_hash = get_fss_for_object(clauses, selectivities, relids,
 														&nfeatures, &features);
 
 	if (nfeatures > 0)

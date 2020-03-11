@@ -1,4 +1,5 @@
 #include "aqo.h"
+#include "hash.h"
 
 /*****************************************************************************
  *
@@ -32,7 +33,7 @@ static int	get_id_in_sorted_int_array(int val, int n, int *arr);
 static int get_arg_eclass(int arg_hash, int nargs,
 			   int *args_hash, int *eclass_hash);
 
-static void get_clauselist_args(List *clauselist, int *nargs, int **args_hash);
+static void get_clauselist_args(List *clauselist, int *nargs, int **hashes);
 static int	disjoint_set_get_parent(int *p, int v);
 static void disjoint_set_merge_eclasses(int *p, int v1, int v2);
 static int *perform_eclasses_join(List *clauselist, int nargs, int *args_hash);
@@ -63,14 +64,13 @@ get_query_hash(Query *parse, const char *query_text)
 }
 
 /*
- * For given object (clauselist, selectivities, relidslist) creates feature
- * subspace:
+ * For given object (clauses, selectivities, relids) creates feature subspace:
  *		sets nfeatures
  *		creates and computes fss_hash
  *		transforms selectivities to features
  */
 int
-get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
+get_fss_for_object(List *clauses, List *selectivities, List *relids,
 				   int *nfeatures, double **features)
 {
 	int			n;
@@ -84,7 +84,7 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	int		   *eclass_hash;
 	int			clauses_hash;
 	int			eclasses_hash;
-	int			relidslist_hash;
+	int			relids_hash;
 	List	  **args;
 	ListCell   *l;
 	int			i,
@@ -95,9 +95,9 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 				old_sh;
 	int fss_hash;
 
-	n = list_length(clauselist);
+	n = list_length(clauses);
 
-	get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
+	eclass_hash = get_eclasses(clauses, &nargs, &args_hash);
 
 	clause_hashes = palloc(sizeof(*clause_hashes) * n);
 	clause_has_consts = palloc(sizeof(*clause_has_consts) * n);
@@ -105,7 +105,7 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	*features = palloc0(sizeof(**features) * n);
 
 	i = 0;
-	foreach(l, clauselist)
+	foreach(l, clauses)
 	{
 		clause_hashes[i] = get_clause_hash(
 										((RestrictInfo *) lfirst(l))->clause,
@@ -158,8 +158,8 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
 	 */
 	clauses_hash = get_int_array_hash(sorted_clauses, *nfeatures);
 	eclasses_hash = get_int_array_hash(eclass_hash, nargs);
-	relidslist_hash = get_relidslist_hash(relidslist);
-	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relidslist_hash);
+	relids_hash = get_relidslist_hash(relids);
+	fss_hash = get_fss_hash(clauses_hash, eclasses_hash, relids_hash);
 
 	pfree(clause_hashes);
 	pfree(sorted_clauses);
@@ -176,8 +176,8 @@ get_fss_for_object(List *clauselist, List *selectivities, List *relidslist,
  * Hash is supposed to be constant-insensitive.
  * Also args-order-insensitiveness for equal clause is required.
  */
-int
-get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash)
+hash_t
+get_clause_hash(Expr *clause, int nargs, hash_t *args_hash, hash_t *eclass_hash)
 {
 	Expr	   *cclause;
 	List	  **args = get_clause_args_ptr(clause);
@@ -207,7 +207,7 @@ get_clause_hash(Expr *clause, int nargs, int *args_hash, int *eclass_hash)
 /*
  * Computes hash for given string.
  */
-int
+static int
 get_str_hash(const char *str)
 {
 	return DatumGetInt32(hash_any((const unsigned char *) str,
@@ -217,7 +217,7 @@ get_str_hash(const char *str)
 /*
  * Computes hash for given node.
  */
-int
+static int
 get_node_hash(Node *node)
 {
 	char	   *str;
@@ -232,7 +232,7 @@ get_node_hash(Node *node)
 /*
  * Computes hash for given array of ints.
  */
-int
+static int
 get_int_array_hash(int *arr, int len)
 {
 	return DatumGetInt32(hash_any((const unsigned char *) arr,
@@ -244,7 +244,7 @@ get_int_array_hash(int *arr, int len)
  * Sorts given array in-place to compute hash.
  * The hash is order-insensitive.
  */
-int
+static int
 get_unsorted_unsafe_int_array_hash(int *arr, int len)
 {
 	qsort(arr, len, sizeof(*arr), int_cmp);
@@ -259,7 +259,7 @@ get_unsorted_unsafe_int_array_hash(int *arr, int len)
  * using 'hash_any'.
  * Frees allocated memory before returning hash.
  */
-int
+static int
 get_unordered_int_list_hash(List *lst)
 {
 	int			i = 0;
@@ -282,7 +282,7 @@ get_unordered_int_list_hash(List *lst)
  * "<start_pattern>[^<end_pattern>]*" are replaced with substring
  * "<start_pattern>".
  */
-char *
+static char *
 replace_patterns(const char *str, const char *start_pattern,
 				 bool (*end_pattern) (char ch))
 {
@@ -311,7 +311,7 @@ replace_patterns(const char *str, const char *start_pattern,
  * Computes hash for given feature subspace.
  * Hash is supposed to be clause-order-insensitive.
  */
-int
+static int
 get_fss_hash(int clauses_hash, int eclasses_hash, int relidslist_hash)
 {
 	int			hashes[3];
@@ -327,7 +327,7 @@ get_fss_hash(int clauses_hash, int eclasses_hash, int relidslist_hash)
  * Computes hash for given list of relids.
  * Hash is supposed to be relids-order-insensitive.
  */
-int
+static int
 get_relidslist_hash(List *relidslist)
 {
 	return get_unordered_int_list_hash(relidslist);
@@ -337,7 +337,7 @@ get_relidslist_hash(List *relidslist)
  * Returns the C-string in which the substrings of kind "{CONST.*}" are
  * replaced with substring "{CONST}".
  */
-char *
+static char *
 remove_consts(const char *str)
 {
 	char *res;
@@ -351,7 +351,7 @@ remove_consts(const char *str)
  * Returns the C-string in which the substrings of kind " :location.*}" are
  * replaced with substring " :location}".
  */
-char *
+static char *
 remove_locations(const char *str)
 {
 	return replace_patterns(str, " :location", is_brace);
@@ -361,7 +361,7 @@ remove_locations(const char *str)
  * Returns index of given value in given sorted integer array
  * or -1 if not found.
  */
-int
+static int
 get_id_in_sorted_int_array(int val, int n, int *arr)
 {
 	int		   *i;
@@ -380,7 +380,7 @@ get_id_in_sorted_int_array(int val, int n, int *arr)
  * Returns class of equivalence for given argument hash or 0 if such hash
  * does not belong to any equivalence class.
  */
-int
+static int
 get_arg_eclass(int arg_hash, int nargs, int *args_hash, int *eclass_hash)
 {
 	int			di = get_id_in_sorted_int_array(arg_hash, nargs, args_hash);
@@ -395,53 +395,55 @@ get_arg_eclass(int arg_hash, int nargs, int *args_hash, int *eclass_hash)
  * Builds list of non-constant arguments of equivalence clauses
  * of given clauselist.
  */
-void
-get_clauselist_args(List *clauselist, int *nargs, int **args_hash)
+static void
+get_clauselist_args(List *clauselist, int *nargs, int **hashes)
 {
 	RestrictInfo *rinfo;
 	List	  **args;
 	ListCell   *l;
-	ListCell   *l2;
+	ListCell   *arg;
 	int			i = 0;
 	int			sh = 0;
 	int			cnt = 0;
 
+	/* Compute a number of args participated in equivalence clauses */
 	foreach(l, clauselist)
 	{
 		rinfo = (RestrictInfo *) lfirst(l);
 		args = get_clause_args_ptr(rinfo->clause);
 		if (args != NULL && clause_is_eq_clause(rinfo->clause))
-			foreach(l2, *args)
-				if (!IsA(lfirst(l2), Const))
+			foreach(arg, *args)
+				if (!IsA(lfirst(arg), Const))
 				cnt++;
 	}
 
-	*args_hash = palloc(cnt * sizeof(**args_hash));
+	/* Compute array of hashes */
+	*hashes = palloc(cnt * sizeof(**hashes));
 	foreach(l, clauselist)
 	{
 		rinfo = (RestrictInfo *) lfirst(l);
 		args = get_clause_args_ptr(rinfo->clause);
 		if (args != NULL && clause_is_eq_clause(rinfo->clause))
-			foreach(l2, *args)
-				if (!IsA(lfirst(l2), Const))
-				(*args_hash)[i++] = get_node_hash(lfirst(l2));
+			foreach(arg, *args)
+				if (!IsA(lfirst(arg), Const))
+				(*hashes)[i++] = get_node_hash(lfirst(arg));
 	}
-	qsort(*args_hash, cnt, sizeof(**args_hash), int_cmp);
+	qsort(*hashes, cnt, sizeof(**hashes), int_cmp);
 
 	for (i = 1; i < cnt; ++i)
-		if ((*args_hash)[i - 1] == (*args_hash)[i])
+		if ((*hashes)[i - 1] == (*hashes)[i])
 			sh++;
 		else
-			(*args_hash)[i - sh] = (*args_hash)[i];
+			(*hashes)[i - sh] = (*hashes)[i];
 
 	*nargs = cnt - sh;
-	*args_hash = repalloc(*args_hash, (*nargs) * sizeof(**args_hash));
+	*hashes = repalloc(*hashes, (*nargs) * sizeof(**hashes));
 }
 
 /*
  * Returns class of an object in disjoint set.
  */
-int
+static int
 disjoint_set_get_parent(int *p, int v)
 {
 	if (p[v] == -1)
@@ -453,7 +455,7 @@ disjoint_set_get_parent(int *p, int v)
 /*
  * Merges two equivalence classes in disjoint set.
  */
-void
+static void
 disjoint_set_merge_eclasses(int *p, int v1, int v2)
 {
 	int			p1,
@@ -473,33 +475,33 @@ disjoint_set_merge_eclasses(int *p, int v1, int v2)
 /*
  * Constructs disjoint set on arguments.
  */
-int *
+static int *
 perform_eclasses_join(List *clauselist, int nargs, int *args_hash)
 {
-	RestrictInfo *rinfo;
-	int		   *p;
-	ListCell   *l,
-			   *l2;
-	List	  **args;
-	int			h2;
-	int			i2,
-				i3;
+	int *p;
+	ListCell   *l;
+	int i3;
+	int h2;
+	int i2;
 
-	p = palloc(nargs * sizeof(*p));
+	p = (int *) palloc(nargs * sizeof(*p));
 	memset(p, -1, nargs * sizeof(*p));
 
 	foreach(l, clauselist)
 	{
-		rinfo = (RestrictInfo *) lfirst(l);
-		args = get_clause_args_ptr(rinfo->clause);
+		RestrictInfo *rinfo = (RestrictInfo *) lfirst(l);
+		List **args = get_clause_args_ptr(rinfo->clause);
+
 		if (args != NULL && clause_is_eq_clause(rinfo->clause))
 		{
+			ListCell *arg;
+
 			i3 = -1;
-			foreach(l2, *args)
+			foreach(arg, *args)
 			{
-				if (!IsA(lfirst(l2), Const))
+				if (!IsA(lfirst(arg), Const))
 				{
-					h2 = get_node_hash(lfirst(l2));
+					h2 = get_node_hash(lfirst(arg));
 					i2 = get_id_in_sorted_int_array(h2, nargs, args_hash);
 					if (i3 != -1)
 						disjoint_set_merge_eclasses(p, i2, i3);
@@ -516,15 +518,20 @@ perform_eclasses_join(List *clauselist, int nargs, int *args_hash)
  * Constructs arg_hashes and arg_hash->eclass_hash mapping for all non-constant
  * arguments of equivalence clauses of given clauselist.
  */
-void
-get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
+hash_t *
+get_eclasses(List *clauselist, int *nargs, hash_t **args_hash)
 {
 	int		   *p;
 	List	  **lsts;
 	int			i,
 				v;
 	int		   *e_hashes;
+	hash_t *eclass_hash;
 
+	/*
+	 * Get array of hashes of arguments from equivalence expressions without
+	 * duplicates.
+	 */
 	get_clauselist_args(clauselist, nargs, args_hash);
 
 	p = perform_eclasses_join(clauselist, *nargs, *args_hash);
@@ -542,21 +549,23 @@ get_eclasses(List *clauselist, int *nargs, int **args_hash, int **eclass_hash)
 	for (i = 0; i < *nargs; ++i)
 		e_hashes[i] = get_unordered_int_list_hash(lsts[i]);
 
-	*eclass_hash = palloc((*nargs) * sizeof(**eclass_hash));
+	eclass_hash = palloc((*nargs) * sizeof(*eclass_hash));
 	for (i = 0; i < *nargs; ++i)
-		(*eclass_hash)[i] = e_hashes[disjoint_set_get_parent(p, i)];
+		eclass_hash[i] = e_hashes[disjoint_set_get_parent(p, i)];
 
 	for (i = 0; i < *nargs; ++i)
 		list_free(lsts[i]);
+
 	pfree(lsts);
 	pfree(p);
 	pfree(e_hashes);
+	return eclass_hash;
 }
 
 /*
  * Checks whether the given char is brace, i. e. '{' or '}'.
  */
-bool
+static bool
 is_brace(char ch)
 {
 	return ch == '{' || ch == '}';
@@ -565,7 +574,7 @@ is_brace(char ch)
 /*
  * Returns whether arguments list contain constants.
  */
-bool
+static bool
 has_consts(List *lst)
 {
 	ListCell   *l;
@@ -579,7 +588,7 @@ has_consts(List *lst)
 /*
  * Returns pointer on the args list in clause or NULL.
  */
-List **
+static List **
 get_clause_args_ptr(Expr *clause)
 {
 	switch (clause->type)
@@ -605,7 +614,7 @@ get_clause_args_ptr(Expr *clause)
 /*
  * Returns whether the clause is an equivalence clause.
  */
-bool
+static bool
 clause_is_eq_clause(Expr *clause)
 {
 	/* TODO: fix this horrible mess */

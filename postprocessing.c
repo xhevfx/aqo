@@ -1,5 +1,6 @@
 #include "aqo.h"
 #include "assumptions.h"
+#include "hash.h"
 
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
@@ -37,9 +38,9 @@ static char *PlanStateInfo = "PlanStateInfo";
 static void atomic_fss_learn_step(int fss_hash, int ncols,
 					  double **matrix, double *targets,
 					  double *features, double target);
-static void learn_sample(List *clauselist,
+static void learn_sample(List *clauses,
 			 List *selectivities,
-			 List *relidslist,
+			 List *relids,
 			 double true_cardinality,
 			 double predicted_cardinality,
 			 int plan_fss);
@@ -83,7 +84,7 @@ atomic_fss_learn_step(int fss_hash, int ncols,
  * true cardinalities) performs learning procedure.
  */
 static void
-learn_sample(List *clauselist, List *selectivities, List *relidslist,
+learn_sample(List *clauses, List *selectivities, List *relids,
 			 double true_cardinality, double predicted_cardinality, int plan_fss)
 {
 	int			fss_hash;
@@ -110,7 +111,7 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 	 * rules or optimizations. And Now we will use lists of clauses and
 	 * selectivities was built by the really executed plan.
 	 */
-	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
+	fss_hash = get_fss_for_object(clauses, selectivities, relids,
 					   &nfeatures, &features);
 
 	/* For debug purposes only. */
@@ -156,7 +157,7 @@ restore_selectivities(List *clauselist,
 	if (parametrized_sel)
 	{
 		cur_relid = linitial_int(relidslist);
-		get_eclasses(clauselist, &nargs, &args_hash, &eclass_hash);
+		eclass_hash = get_eclasses(clauselist, &nargs, &args_hash);
 	}
 
 	foreach(l, clauselist)
@@ -218,7 +219,7 @@ DropUsedAssumptions(PlanState *ps, void *context)
 	Assert(context != NULL);
 
 	/* Remove the assumption because know we have actual cardinality. */
-	if (drop_assumption(query_context.fspace_hash, ps->plan->fss_hash))
+	if (drop_assumption(query_context.fspace_hash, ps->plan->fss_hash, ps->plan->plan_rows))
 		(*((int *) context))++;
 
 	return planstate_tree_walker(ps, DropUsedAssumptions, context);
@@ -382,6 +383,7 @@ learnOnPlanState(PlanState *p, void *context)
 	ctx->clauselist = list_concat(ctx->clauselist, SubplanCtx.clauselist);
 	ctx->selectivities = list_concat(ctx->selectivities,
 												SubplanCtx.selectivities);
+
 	return false;
 }
 
@@ -817,7 +819,7 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 			ExplainPropertyInteger("Query hash", NULL,
 												query_context.query_hash, es);
 			ExplainPropertyInteger("JOINS", NULL, njoins, es);
-			ExplainPropertyInteger("nassumptions", NULL, query_context.nassumptions, es);
+			ExplainPropertyInteger("Assumptions used", NULL, query_context.nassumptions, es);
 		}
 	}
 #endif

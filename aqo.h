@@ -271,16 +271,6 @@ extern ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
 
 extern void ppi_hook(ParamPathInfo *ppi);
 
-/* Hash functions */
-int			get_query_hash(Query *parse, const char *query_text);
-extern int get_fss_for_object(List *clauselist, List *selectivities,
-						List *relidslist, int *nfeatures, double **features);
-void		get_eclasses(List *clauselist, int *nargs,
-						 int **args_hash, int **eclass_hash);
-int			get_clause_hash(Expr *clause, int nargs,
-							int *args_hash, int *eclass_hash);
-
-
 /* Storage interaction */
 bool find_query(int query_hash,
 		   Datum *search_values,
@@ -339,7 +329,7 @@ List *get_selectivities(PlannerInfo *root,
 				  JoinType jointype,
 				  SpecialJoinInfo *sjinfo);
 List	   *get_list_of_relids(PlannerInfo *root, Relids relids);
-List	   *get_path_clauses(Path *path, PlannerInfo *root, List **selectivities);
+List	   *get_path_clauses(Path *path, PlannerInfo *root, List **selectivities, bool s);
 
 /* Cardinality estimation */
 double predict_for_relation(List *restrict_clauses, List *selectivities,

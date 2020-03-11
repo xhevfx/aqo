@@ -1,4 +1,6 @@
 #include "aqo.h"
+#include "hash.h"
+
 #include "access/parallel.h"
 #include "access/table.h"
 #include "commands/extension.h"

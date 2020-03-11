@@ -65,7 +65,7 @@ get_list_of_relids(PlannerInfo *root, Relids relids)
  * may be modified without corruption of the input data.
  */
 List *
-get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
+get_path_clauses(Path *path, PlannerInfo *root, List **selectivities, bool s)
 {
 	List	   *inner;
 	List	   *inner_sel = NIL;
@@ -93,65 +93,65 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 										NULL);
 
 			outer = get_path_clauses(((JoinPath *) path)->outerjoinpath, root,
-									 &outer_sel);
+									 &outer_sel, s);
 			inner = get_path_clauses(((JoinPath *) path)->innerjoinpath, root,
-									 &inner_sel);
+									 &inner_sel, s);
 			*selectivities = list_concat(cur_sel,
 										 list_concat(outer_sel, inner_sel));
-			return list_concat(list_copy(cur), list_concat(outer, inner));
+			cur = list_concat(list_copy(cur), list_concat(outer, inner));
 			break;
 		case T_UniquePath:
-			return get_path_clauses(((UniquePath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((UniquePath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_GatherPath:
 		case T_GatherMergePath:
-			return get_path_clauses(((GatherPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((GatherPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_MaterialPath:
-			return get_path_clauses(((MaterialPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((MaterialPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_ProjectionPath:
-			return get_path_clauses(((ProjectionPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((ProjectionPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_SortPath:
-			return get_path_clauses(((SortPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((SortPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_GroupPath:
-			return get_path_clauses(((GroupPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((GroupPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_UpperUniquePath:
-			return get_path_clauses(((UpperUniquePath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((UpperUniquePath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_AggPath:
-			return get_path_clauses(((AggPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((AggPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_GroupingSetsPath:
-			return get_path_clauses(((GroupingSetsPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((GroupingSetsPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_WindowAggPath:
-			return get_path_clauses(((WindowAggPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((WindowAggPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_SetOpPath:
-			return get_path_clauses(((SetOpPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((SetOpPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_LockRowsPath:
-			return get_path_clauses(((LockRowsPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((LockRowsPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		case T_LimitPath:
-			return get_path_clauses(((LimitPath *) path)->subpath, root,
-									selectivities);
+			cur = get_path_clauses(((LimitPath *) path)->subpath, root,
+									selectivities, s);
 			break;
 		default:
 			cur = list_concat(list_copy(path->parent->baserestrictinfo),
@@ -163,7 +163,9 @@ get_path_clauses(Path *path, PlannerInfo *root, List **selectivities)
 			else
 				cur_sel = get_selectivities(root, cur, 0, JOIN_INNER, NULL);
 			*selectivities = cur_sel;
-			return cur;
 			break;
 	}
+	if (s)
+		elog(WARNING, "stage: %d (%d %d)", list_length(cur), path->type, path->pathtype);
+	return cur;
 }

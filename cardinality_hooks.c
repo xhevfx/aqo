@@ -1,4 +1,5 @@
 #include "aqo.h"
+#include "hash.h"
 
 #include "assumptions.h"
 
@@ -207,7 +208,7 @@ aqo_get_parameterized_baserel_size(PlannerInfo *root,
 		selectivities = get_selectivities(root, allclauses, rel->relid,
 										  JOIN_INNER, NULL);
 		relid = planner_rt_fetch(rel->relid, root)->relid;
-		get_eclasses(allclauses, &nargs, &args_hash, &eclass_hash);
+		eclass_hash = get_eclasses(allclauses, &nargs, &args_hash);
 		forboth(l, allclauses, l2, selectivities)
 		{
 			current_hash = get_clause_hash(
@@ -261,7 +262,7 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	List	   *relids;
 	List	   *outer_clauses;
 	List	   *inner_clauses;
-	List	   *allclauses;
+	List	   *clauses;
 	List	   *selectivities;
 	List	   *inner_selectivities;
 	List	   *outer_selectivities;
@@ -287,16 +288,16 @@ aqo_set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 
 	relids = get_list_of_relids(root, rel->relids);
 	outer_clauses = get_path_clauses(outer_rel->cheapest_total_path, root,
-									 &outer_selectivities);
+									 &outer_selectivities, false);
 	inner_clauses = get_path_clauses(inner_rel->cheapest_total_path, root,
-									 &inner_selectivities);
-	allclauses = list_concat(list_copy(restrictlist),
+									 &inner_selectivities, false);
+	clauses = list_concat(list_copy(restrictlist),
 							 list_concat(outer_clauses, inner_clauses));
 	selectivities = list_concat(current_selectivities,
 								list_concat(outer_selectivities,
 											inner_selectivities));
 
-	predicted = predict_for_relation(allclauses, selectivities, relids, &fss);
+	predicted = predict_for_relation(clauses, selectivities, relids, &fss);
 	rel->fss_hash = fss;
 
 	if (predicted >= 0)
@@ -361,8 +362,8 @@ aqo_get_parameterized_joinrel_size(PlannerInfo *root,
 	}
 
 	relids = get_list_of_relids(root, rel->relids);
-	outer_clauses = get_path_clauses(outer_path, root, &outer_selectivities);
-	inner_clauses = get_path_clauses(inner_path, root, &inner_selectivities);
+	outer_clauses = get_path_clauses(outer_path, root, &outer_selectivities, false);
+	inner_clauses = get_path_clauses(inner_path, root, &inner_selectivities, false);
 	allclauses = list_concat(list_copy(restrict_clauses),
 							 list_concat(outer_clauses, inner_clauses));
 	selectivities = list_concat(current_selectivities,
