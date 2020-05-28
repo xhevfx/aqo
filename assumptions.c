@@ -1,5 +1,9 @@
 /*
- * assumptions.c
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/assumptions.c
  *
  */
 

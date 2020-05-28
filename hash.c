@@ -1,7 +1,5 @@
-#include "aqo.h"
-#include "hash.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	HASH FUNCTIONS
  *
@@ -12,7 +10,17 @@
  * only in the values of their constants. We want query_hash, clause_hash and
  * fss_hash to satisfy this property.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/hash.c
+ *
+ */
+
+#include "aqo.h"
+#include "hash.h"
 
 static int	get_str_hash(const char *str);
 static int	get_node_hash(Node *node);

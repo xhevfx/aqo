@@ -1,9 +1,5 @@
-#include "aqo.h"
-#include "hash.h"
-
-#include "assumptions.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	CARDINALITY ESTIMATION HOOKS
  *
@@ -20,7 +16,19 @@
  * refusal to predict cardinality. In this case hooks also use default
  * postgreSQL cardinality estimator.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/cardinality_hooks.c
+ *
+ */
+
+#include "aqo.h"
+#include "hash.h"
+
+#include "assumptions.h"
 
 double predicted_ppi_rows;
 double fss_ppi_hash;

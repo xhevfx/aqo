@@ -1,16 +1,24 @@
-#include "aqo.h"
-#include "hash.h"
-
-#include "optimizer/optimizer.h"
-
-/*****************************************************************************
+/*
+ *******************************************************************************
  *
  *	CARDINALITY ESTIMATION
  *
  * This is the module in which cardinality estimation problem obtained from
  * cardinality_hooks turns into machine learning problem.
  *
- *****************************************************************************/
+ *******************************************************************************
+ *
+ * Copyright (c) 2016-2020, Postgres Professional
+ *
+ * IDENTIFICATION
+ *	  aqo/cardinality_estimation.c
+ *
+ */
+
+#include "aqo.h"
+#include "hash.h"
+
+#include "optimizer/optimizer.h"
 
 /*
  * General method for prediction the cardinality of given relation.
