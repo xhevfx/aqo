@@ -234,7 +234,10 @@ update_query(int query_hash, bool learn_aqo, bool use_aqo,
 	slot = MakeSingleTupleTableSlot(query_index_scan->heapRelation->rd_att,
 														&TTSOpsBufferHeapTuple);
 	find_ok = index_getnext_slot(query_index_scan, ForwardScanDirection, slot);
-	Assert(find_ok);
+	if (!find_ok)
+		elog(PANIC, "[AQO]: Update of non-existed query: query hash: %d, fss hash: %d, use aqo: %s",
+			 query_hash, fspace_hash, use_aqo ? "true" : "false");
+
 	tuple = ExecFetchSlotHeapTuple(slot, true, &shouldFree);
 	Assert(shouldFree != true);
 
@@ -967,7 +970,7 @@ my_index_insert(Relation indexRelation,
 						heapRelation, checkUnique);
 #else
 	return index_insert(indexRelation, values, isnull, heap_t_ctid,
-						heapRelation, checkUnique,
+						heapRelation, checkUnique, false,
 						BuildIndexInfo(indexRelation));
 #endif
 }

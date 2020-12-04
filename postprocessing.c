@@ -19,6 +19,7 @@
 #include "aqo.h"
 #include "access/parallel.h"
 #include "optimizer/optimizer.h"
+#include "postgres_fdw.h"
 #include "utils/queryenvironment.h"
 
 typedef struct
@@ -544,7 +545,7 @@ end:
 void
 aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
 {
-	bool		is_join_path;
+	bool is_join_path;
 
 	if (prev_copy_generic_path_info_hook)
 		prev_copy_generic_path_info_hook(root, dest, src);
@@ -569,6 +570,47 @@ aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
 		dest->path_clauses = ((JoinPath *) src)->joinrestrictinfo;
 		dest->path_jointype = ((JoinPath *) src)->jointype;
 	}
+	else if (src->type == T_ForeignPath)
+	{
+		ForeignPath *fpath = (ForeignPath *) src;
+		PgFdwRelationInfo *fpinfo = (PgFdwRelationInfo *) fpath->path.parent->fdw_private;
+
+		/*
+		 * Pushed down foreign join keeps clauses in special fdw_private
+		 * structure.
+		 * I'm not sure what fpinfo structure keeps clauses for sufficient time.
+		 * So, copy clauses.
+		 */
+
+		dest->path_clauses = list_concat(list_copy(fpinfo->joinclauses),
+										 list_copy(fpinfo->remote_conds));
+		dest->path_clauses = list_concat(dest->path_clauses,
+										 list_copy(fpinfo->local_conds));
+
+		dest->path_jointype = ((JoinPath *) src)->jointype;
+
+		dest->path_relids = get_list_of_relids(root, fpinfo->lower_subquery_rels);
+
+		if (fpinfo->outerrel)
+		{
+			dest->path_clauses = list_concat(dest->path_clauses,
+								list_copy(fpinfo->outerrel->baserestrictinfo));
+			dest->path_clauses = list_concat(dest->path_clauses,
+								list_copy(fpinfo->outerrel->joininfo));
+			dest->path_relids = list_concat(dest->path_relids,
+							get_list_of_relids(root, fpinfo->outerrel->relids));
+		}
+
+		if (fpinfo->innerrel)
+		{
+			dest->path_clauses = list_concat(dest->path_clauses,
+								list_copy(fpinfo->innerrel->baserestrictinfo));
+			dest->path_clauses = list_concat(dest->path_clauses,
+								list_copy(fpinfo->innerrel->joininfo));
+			dest->path_relids = list_concat(dest->path_relids,
+							get_list_of_relids(root, fpinfo->innerrel->relids));
+		}
+	}
 	else
 	{
 		dest->path_clauses = list_concat(
@@ -577,7 +619,8 @@ aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
 		dest->path_jointype = JOIN_INNER;
 	}
 
-	dest->path_relids = get_list_of_relids(root, src->parent->relids);
+	dest->path_relids = list_concat(dest->path_relids,
+								get_list_of_relids(root, src->parent->relids));
 	dest->path_parallel_workers = src->parallel_workers;
 	dest->was_parametrized = (src->param_info != NULL);
 
