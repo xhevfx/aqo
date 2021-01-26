@@ -17,10 +17,13 @@
  */
 
 #include "aqo.h"
+
 #include "access/parallel.h"
+#include "commands/extension.h"
 #include "optimizer/optimizer.h"
 #include "postgres_fdw.h"
 #include "utils/queryenvironment.h"
+
 
 typedef struct
 {
@@ -112,7 +115,6 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 
 	fss_hash = get_fss_for_object(clauselist, selectivities, relidslist,
 					   &nfeatures, &features);
-
 	if (nfeatures > 0)
 		for (i = 0; i < aqo_K; ++i)
 			matrix[i] = palloc(sizeof(double) * nfeatures);
@@ -565,69 +567,31 @@ aqo_copy_generic_path_info(PlannerInfo *root, Plan *dest, Path *src)
 		return;
 	}
 
+	dest->path_clauses = src->parent->aqo_specific.clauses;
+	dest->path_relids = src->parent->aqo_specific.relids;
+
 	if (is_join_path)
-	{
-		dest->path_clauses = ((JoinPath *) src)->joinrestrictinfo;
 		dest->path_jointype = ((JoinPath *) src)->jointype;
-	}
 	else if (src->type == T_ForeignPath)
-	{
-		ForeignPath *fpath = (ForeignPath *) src;
-		PgFdwRelationInfo *fpinfo = (PgFdwRelationInfo *) fpath->path.parent->fdw_private;
-
-		/*
-		 * Pushed down foreign join keeps clauses in special fdw_private
-		 * structure.
-		 * I'm not sure what fpinfo structure keeps clauses for sufficient time.
-		 * So, copy clauses.
-		 */
-
-		dest->path_clauses = list_concat(list_copy(fpinfo->joinclauses),
-										 list_copy(fpinfo->remote_conds));
-		dest->path_clauses = list_concat(dest->path_clauses,
-										 list_copy(fpinfo->local_conds));
-
-		dest->path_jointype = ((JoinPath *) src)->jointype;
-
-		dest->path_relids = get_list_of_relids(root, fpinfo->lower_subquery_rels);
-
-		if (fpinfo->outerrel)
-		{
-			dest->path_clauses = list_concat(dest->path_clauses,
-								list_copy(fpinfo->outerrel->baserestrictinfo));
-			dest->path_clauses = list_concat(dest->path_clauses,
-								list_copy(fpinfo->outerrel->joininfo));
-			dest->path_relids = list_concat(dest->path_relids,
-							get_list_of_relids(root, fpinfo->outerrel->relids));
-		}
-
-		if (fpinfo->innerrel)
-		{
-			dest->path_clauses = list_concat(dest->path_clauses,
-								list_copy(fpinfo->innerrel->baserestrictinfo));
-			dest->path_clauses = list_concat(dest->path_clauses,
-								list_copy(fpinfo->innerrel->joininfo));
-			dest->path_relids = list_concat(dest->path_relids,
-							get_list_of_relids(root, fpinfo->innerrel->relids));
-		}
-	}
-	else
-	{
-		dest->path_clauses = list_concat(
-									list_copy(src->parent->baserestrictinfo),
-						 src->param_info ? src->param_info->ppi_clauses : NIL);
+		// ???
 		dest->path_jointype = JOIN_INNER;
-	}
+	else
+		dest->path_jointype = JOIN_INNER;
 
-	dest->path_relids = list_concat(dest->path_relids,
-								get_list_of_relids(root, src->parent->relids));
 	dest->path_parallel_workers = src->parallel_workers;
 	dest->was_parametrized = (src->param_info != NULL);
 
-	if (src->param_info)
+	/* Parameterized path is some different from basic paths. */
+	if (dest->was_parametrized)
 	{
-		dest->predicted_cardinality = src->param_info->predicted_ppi_rows;
-		dest->fss_hash = src->param_info->fss_ppi_hash;
+		/*
+		 * Parameterized path has selected. Use the hash and prediction values,
+		 * corresponding to this path. Add the parameters into the path clauses
+		 * list.
+		 */
+		dest->path_clauses = list_concat(dest->path_clauses, src->parent->aqo_specific.ppi.pclauses);
+		dest->predicted_cardinality = src->parent->aqo_specific.ppi.predicted;
+		dest->fss_hash = src->parent->aqo_specific.ppi.fss;
 	}
 	else
 	{
@@ -750,42 +714,30 @@ RemoveFromQueryContext(QueryDesc *queryDesc)
 }
 
 void
-print_node_explain(ExplainState *es, PlanState *ps, Plan *plan, double rows)
+print_node_explain(ExplainState *es, PlanState *ps, Plan *plan)
 {
-	int wrkrs = 1;
-	double error = -1.;
-
-	if (!aqo_details || !plan || !ps->instrument)
+	if ((!aqo_show_hash && !aqo_details) ||
+		get_extension_oid("aqo", true) == InvalidOid)
+		/*
+		 * Extension hasn't installed yet or we doesn't need to show AQO status.
+		 */
 		return;
 
-	if (ps->worker_instrument && IsParallelTuplesProcessing(plan))
-	{
-		int i;
+	/* Predicted cardinality or/and hash value will be printed. */
+	appendStringInfo(es->str, " (");
 
-		for (i = 0; i < ps->worker_instrument->num_workers; i++)
-		{
-			Instrumentation *instrument = &ps->worker_instrument->instrument[i];
-
-			if (instrument->nloops <= 0)
-				continue;
-
-			wrkrs++;
-		}
-	}
+	if (aqo_show_hash)
+		appendStringInfo(es->str, "hash=%d, ", plan->fss_hash);
 
 	if (plan->predicted_cardinality > 0.)
 	{
-		error = 100. * (plan->predicted_cardinality - (rows*wrkrs))
-									/ plan->predicted_cardinality;
 		appendStringInfo(es->str,
-						 " (AQO: cardinality=%.0lf, error=%.0lf%%",
-						 plan->predicted_cardinality, error);
+						 "cardinality=%.0lf",
+						 plan->predicted_cardinality);
 	}
 	else
-		appendStringInfo(es->str, " (AQO not used");
+		appendStringInfo(es->str, "not predicted");
 
-	if (aqo_show_hash)
-		appendStringInfo(es->str, ", fss hash = %d", plan->fss_hash);
 	appendStringInfoChar(es->str, ')');
 }
 
@@ -802,8 +754,15 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 		prev_ExplainOnePlan_hook(plannedstmt, into, es, queryString,
 								 params, planduration, queryEnv);
 
-	if (!aqo_details)
+	if ((!aqo_show_hash && !aqo_details) ||
+		get_extension_oid("aqo", true) == InvalidOid)
+		/*
+		 * Extension hasn't installed yet or we doesn't need to show AQO status.
+		 */
 		return;
+
+	if (aqo_show_hash)
+		ExplainPropertyInteger("Query hash", NULL, query_context.query_hash, es);
 
 	/* Report to user about aqo state only in verbose mode */
 	ExplainPropertyBool("Using aqo", query_context.use_aqo, es);
@@ -838,10 +797,5 @@ print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 	 * auxiliary functions.
 	 */
 	if (aqo_mode != AQO_MODE_DISABLED || force_collect_stat)
-	{
-		if (aqo_show_hash)
-			ExplainPropertyInteger("Query hash", NULL,
-									query_context.query_hash, es);
 		ExplainPropertyInteger("JOINS", NULL, njoins, es);
-	}
 }

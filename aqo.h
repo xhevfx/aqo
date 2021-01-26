@@ -220,9 +220,6 @@ typedef struct QueryContextData
 	double		query_planning_time;
 } QueryContextData;
 
-extern double predicted_ppi_rows;
-extern double fss_ppi_hash;
-
 /* Parameters of autotuning */
 extern int	aqo_stat_size;
 extern int	auto_tuning_window_size;
@@ -267,8 +264,6 @@ extern get_parameterized_joinrel_size_hook_type
 									prev_get_parameterized_joinrel_size_hook;
 extern copy_generic_path_info_hook_type prev_copy_generic_path_info_hook;
 extern ExplainOnePlan_hook_type prev_ExplainOnePlan_hook;
-
-extern void ppi_hook(ParamPathInfo *ppi);
 
 /* Hash functions */
 int get_query_hash(Query *parse, const char *query_text);
@@ -316,8 +311,7 @@ void print_into_explain(PlannedStmt *plannedstmt, IntoClause *into,
 						QueryEnvironment *queryEnv);
 extern void print_node_explain(ExplainState *es,
 							   PlanState *ps,
-							   Plan *plan,
-							   double rows);
+							   Plan *plan);
 void disable_aqo_for_query(void);
 
 /* Cardinality estimation hooks */

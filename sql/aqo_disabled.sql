@@ -56,7 +56,6 @@ DROP TABLE tmp1;
 SET aqo.mode = 'controlled';
 
 UPDATE aqo_queries SET learn_aqo = true, use_aqo = true, auto_tuning = false;
-
 EXPLAIN SELECT * FROM aqo_test0
 WHERE a < 3 AND b < 3 AND c < 3 AND d < 3;
 

@@ -170,7 +170,6 @@ _PG_init(void)
 	ExplainOnePlan_hook							= print_into_explain;
 	prev_ExplainOneNode_hook					= ExplainOneNode_hook;
 	ExplainOneNode_hook							= print_node_explain;
-	parampathinfo_postinit_hook					= ppi_hook;
 
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,
