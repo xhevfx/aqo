@@ -128,3 +128,8 @@ DELETE FROM public.aqo_data ad WHERE (ad.fspace_hash = $1);
 DELETE FROM public.aqo_query_stat aq WHERE (aq.query_hash = $1);
 DELETE FROM public.aqo_query_texts aq WHERE (aq.query_hash = $1);
 $func$ LANGUAGE SQL;
+
+CREATE FUNCTION prandom(center float)
+RETURNS float
+AS 'MODULE_PATHNAME'
+LANGUAGE C STRICT;

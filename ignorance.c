@@ -2,6 +2,7 @@
 #include "ignorance.h"
 
 #include "access/heapam.h"
+#include "access/parallel.h"
 #include "executor/spi.h"
 #include "utils/lsyscache.h"
 #include "miscadmin.h"
@@ -16,7 +17,8 @@ set_ignorance(bool newval, void *extra)
 	 * It is not problem. We will check existence at each update and create this
 	 * table in dynamic mode, if needed.
 	 */
-	if (IsUnderPostmaster && newval && (aqo_log_ignorance != newval))
+	if (IsUnderPostmaster && !IsParallelWorker() && newval &&
+		(aqo_log_ignorance != newval))
 		/* Create storage and no error, if it exists already. */
 		(bool) create_ignorance_table(true);
 

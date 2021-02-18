@@ -19,6 +19,7 @@
 PG_MODULE_MAGIC;
 
 void _PG_init(void);
+PG_FUNCTION_INFO_V1(prandom);
 
 #define AQO_MODULE_MAGIC	(1234)
 
@@ -282,4 +283,42 @@ init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2)
 	tag->locktag_field4 = 0;
 	tag->locktag_type = LOCKTAG_USERLOCK;
 	tag->locktag_lockmethodid = USER_LOCKMETHOD;
+}
+
+#include "miscadmin.h"
+static bool prandom_seed_set = false;
+static unsigned short prandom_seed[3] = {0, 0, 0};
+
+Datum
+prandom(PG_FUNCTION_ARGS)
+{
+	float8		result;
+	float8		center = PG_GETARG_FLOAT8(0);
+	double		uniform;
+
+	/* Initialize random seed, if not done yet in this process */
+	if (unlikely(!prandom_seed_set))
+	{
+		TimestampTz now = GetCurrentTimestamp();
+		uint64		iseed;
+
+		/* Mix the PID with the most predictable bits of the timestamp */
+		iseed = (uint64) now ^ ((uint64) MyProcPid << 32);
+		prandom_seed[0] = (unsigned short) iseed;
+		prandom_seed[1] = (unsigned short) (iseed >> 16);
+		prandom_seed[2] = (unsigned short) (iseed >> 32);
+		prandom_seed_set = true;
+	}
+
+	/*
+	 * Use inverse transform sampling to generate a value > 0, such that the
+	 * expected (i.e. average) value is the given argument.
+	 */
+
+	/* erand in [0, 1), uniform in (0, 1] */
+	uniform = 1.0 - pg_erand48(prandom_seed);
+
+	result = (int64) (-log(uniform) * center + 0.5);
+
+	PG_RETURN_FLOAT8(result);
 }
