@@ -286,6 +286,7 @@ init_lock_tag(LOCKTAG *tag, uint32 key1, uint32 key2)
 }
 
 #include "miscadmin.h"
+#include "utils/timestamp.h"
 static bool prandom_seed_set = false;
 static unsigned short prandom_seed[3] = {0, 0, 0};
 

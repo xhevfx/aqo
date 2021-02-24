@@ -20,7 +20,7 @@ set_ignorance(bool newval, void *extra)
 	if (IsUnderPostmaster && !IsParallelWorker() && newval &&
 		(aqo_log_ignorance != newval))
 		/* Create storage and no error, if it exists already. */
-		(bool) create_ignorance_table(true);
+		create_ignorance_table(true);
 
 	aqo_log_ignorance = newval;
 }
@@ -103,7 +103,7 @@ update_ignorance(int qhash, int fhash, int fss_hash, Plan *plan)
 	if (!OidIsValid(reloid))
 	{
 		/* This table doesn't created on instance startup. Create now. */
-		(bool) create_ignorance_table(false);
+		create_ignorance_table(false);
 		reloid = RangeVarGetRelid(rv, NoLock, true);
 			if (!OidIsValid(reloid))
 				elog(PANIC, "Ignorance table does not exists!");
