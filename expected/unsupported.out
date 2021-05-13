@@ -1,7 +1,7 @@
 CREATE EXTENSION aqo;
 SET aqo.mode = 'learn';
 SET aqo.show_details = 'on';
-DROP TABLE IF EXISTS t;
+DROP TABLE IF EXISTS t CASCADE;
 CREATE TABLE t AS SELECT (gs.* / 50) AS x FROM generate_series(1,1000) AS gs;
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
 	SELECT * FROM t GROUP BY (x) HAVING x > 3;
@@ -38,4 +38,140 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)
  JOINS: 0
 (11 rows)
 
+--
+-- Ignore subplans in clauses.
+--
+CREATE TABLE t1 AS (SELECT * FROM generate_series(1,10) AS id);
+CREATE TABLE t2 AS (SELECT * FROM generate_series(1,10) AS id);
+ANALYZE t1,t2;
+--
+-- With 'never executed'
+--
+-- Learn phase
+SELECT count(*) FROM t1 WHERE EXISTS (SELECT * FROM t2 WHERE t2.id=t1.id UNION ALL SELECT * FROM t2 WHERE t2.id=t1.id);
+ count 
+-------
+    10
+(1 row)
+
+-- Demo
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT count(*) FROM t1 WHERE EXISTS (
+	SELECT * FROM t2 WHERE t2.id=t1.id
+	UNION ALL
+	SELECT * FROM t2 WHERE t2.id=t1.id
+);
+                         QUERY PLAN                          
+-------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Seq Scan on t1 (actual rows=10 loops=1)
+         AQO not used
+         Filter: (SubPlan 1)
+         SubPlan 1
+           ->  Append (actual rows=1 loops=10)
+                 AQO not used
+                 ->  Seq Scan on t2 (actual rows=1 loops=10)
+                       AQO not used
+                       Filter: (id = t1.id)
+                       Rows Removed by Filter: 4
+                 ->  Seq Scan on t2 t2_1 (never executed)
+                       Filter: (id = t1.id)
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(17 rows)
+
+--
+-- All nodes accessed, but AQO hasn't used for cardinality prediction on
+-- a build of a scan node.
+--
+-- Learn phase
+SELECT count(*) FROM t1 WHERE EXISTS (SELECT * FROM t2 WHERE t2.id>10 UNION ALL SELECT * FROM t2 WHERE t2.id=t1.id);
+ count 
+-------
+    10
+(1 row)
+
+-- Demo
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT count(*) FROM t1 WHERE EXISTS (
+	SELECT * FROM t2 WHERE t2.id>10
+	UNION ALL
+	SELECT * FROM t2 WHERE t2.id=t1.id
+);
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Seq Scan on t1 (actual rows=10 loops=1)
+         AQO not used
+         Filter: (SubPlan 1)
+         SubPlan 1
+           ->  Append (actual rows=1 loops=10)
+                 AQO not used
+                 ->  Seq Scan on t2 (actual rows=0 loops=10)
+                       AQO: rows=1, error=100%
+                       Filter: (id > 10)
+                       Rows Removed by Filter: 10
+                 ->  Seq Scan on t2 t2_1 (actual rows=1 loops=10)
+                       AQO: rows=1, error=0%
+                       Filter: (id = t1.id)
+                       Rows Removed by Filter: 4
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 0
+(19 rows)
+
+-- The case of OUTER JOIN
+-- Learn phase
+SELECT count(*) FROM t1 LEFT JOIN t2 USING(id) WHERE EXISTS (
+	SELECT * FROM t2 WHERE t2.id>10
+	UNION ALL
+	SELECT * FROM t2 WHERE t2.id=t1.id
+);
+ count 
+-------
+    10
+(1 row)
+
+-- Demo
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT count(*) FROM t1 LEFT JOIN t2 USING(id) WHERE EXISTS (
+	SELECT * FROM t2 WHERE t2.id>10
+	UNION ALL
+	SELECT * FROM t2 WHERE t2.id=t1.id
+);
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   AQO not used
+   ->  Hash Left Join (actual rows=10 loops=1)
+         AQO not used
+         Hash Cond: (t1.id = t2.id)
+         ->  Seq Scan on t1 (actual rows=10 loops=1)
+               AQO not used
+               Filter: (SubPlan 1)
+               SubPlan 1
+                 ->  Append (actual rows=1 loops=10)
+                       AQO not used
+                       ->  Seq Scan on t2 t2_1 (actual rows=0 loops=10)
+                             AQO: rows=1, error=100%
+                             Filter: (id > 10)
+                             Rows Removed by Filter: 10
+                       ->  Seq Scan on t2 t2_2 (actual rows=1 loops=10)
+                             AQO: rows=1, error=0%
+                             Filter: (id = t1.id)
+                             Rows Removed by Filter: 4
+         ->  Hash (actual rows=10 loops=1)
+               AQO not used
+               Buckets: 1024  Batches: 1  Memory Usage: 9kB
+               ->  Seq Scan on t2 (actual rows=10 loops=1)
+                     AQO: rows=10, error=0%
+ Using aqo: true
+ AQO mode: LEARN
+ JOINS: 1
+(27 rows)
+
+DROP TABLE IF EXISTS t,t1,t2 CASCADE;
 DROP EXTENSION aqo;
