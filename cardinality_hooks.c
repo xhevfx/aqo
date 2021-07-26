@@ -433,7 +433,7 @@ predict_num_groups(PlannerInfo *root, Path *subpath, List *group_exprs,
 double
 aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 							 Path *subpath, RelOptInfo *grouped_rel,
-							 List **pgset, EstimationInfo *estinfo)
+							 List **pgset)
 {
 	double input_rows = subpath->rows;
 	double nGroups = -1;
@@ -446,7 +446,7 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 			nGroups = (*prev_estimate_num_groups_hook)(root, groupExprs,
 													   subpath,
 													   grouped_rel,
-													   pgset, estinfo);
+													   pgset);
 		if (nGroups < 0)
 			goto default_estimator;
 		else
@@ -459,10 +459,6 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 
 	if (prev_estimate_num_groups_hook != NULL)
 		elog(WARNING, "AQO replaced another estimator of a groups number");
-
-	/* Zero the estinfo output parameter, if non-NULL */
-	if (estinfo != NULL)
-		memset(estinfo, 0, sizeof(EstimationInfo));
 
 	if (groupExprs == NIL)
 		return 1.0;
@@ -484,5 +480,5 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 		grouped_rel->predicted_cardinality = -1;
 
 default_estimator:
-	return estimate_num_groups(root, groupExprs, input_rows, pgset, estinfo);
+	return estimate_num_groups(root, groupExprs, input_rows, pgset);
 }
