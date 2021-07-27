@@ -464,7 +464,6 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 		return 1.0;
 
 	predicted = predict_num_groups(root, subpath, groupExprs, &fss);
-
 	if (predicted > 0.)
 	{
 		grouped_rel->predicted_cardinality = predicted;
