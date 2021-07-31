@@ -11,7 +11,7 @@ index f27e458482..0c62191904 100644
  		auto_explain	\
  		bloom		\
 diff --git a/src/backend/commands/explain.c b/src/backend/commands/explain.c
-index 340db2bac4..b55896bb89 100644
+index 36fbe129cf..a142f92122 100644
 --- a/src/backend/commands/explain.c
 +++ b/src/backend/commands/explain.c
 @@ -24,6 +24,7 @@
@@ -97,7 +97,7 @@ index 77d082d8b4..b911ab02da 100644
  
  /*
 diff --git a/src/backend/optimizer/path/costsize.c b/src/backend/optimizer/path/costsize.c
-index b54cf34a8e..d3234ae683 100644
+index 30c8595f76..18699564b3 100644
 --- a/src/backend/optimizer/path/costsize.c
 +++ b/src/backend/optimizer/path/costsize.c
 @@ -98,6 +98,11 @@
@@ -120,7 +120,7 @@ index b54cf34a8e..d3234ae683 100644
  
  
  /*
-@@ -4908,6 +4912,58 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
+@@ -4905,6 +4909,58 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
  }
  
  
@@ -179,7 +179,7 @@ index b54cf34a8e..d3234ae683 100644
  /*
   * set_baserel_size_estimates
   *		Set the size estimates for the given base relation.
-@@ -4924,19 +4980,10 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
+@@ -4921,19 +4977,10 @@ approx_tuple_count(PlannerInfo *root, JoinPath *path, List *quals)
  void
  set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
  {
@@ -200,7 +200,7 @@ index b54cf34a8e..d3234ae683 100644
  
  	cost_qual_eval(&rel->baserestrictcost, rel->baserestrictinfo, root);
  
-@@ -4947,13 +4994,33 @@ set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
+@@ -4944,13 +4991,33 @@ set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
   * get_parameterized_baserel_size
   *		Make a size estimate for a parameterized scan of a base relation.
   *
@@ -236,7 +236,7 @@ index b54cf34a8e..d3234ae683 100644
  {
  	List	   *allclauses;
  	double		nrows;
-@@ -4982,6 +5049,36 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
+@@ -4979,6 +5046,36 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
   * set_joinrel_size_estimates
   *		Set the size estimates for the given join relation.
   *
@@ -273,7 +273,7 @@ index b54cf34a8e..d3234ae683 100644
   * The rel's targetlist must have been constructed already, and a
   * restriction clause list that matches the given component rels must
   * be provided.
-@@ -5001,11 +5098,11 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
+@@ -4998,11 +5095,11 @@ get_parameterized_baserel_size(PlannerInfo *root, RelOptInfo *rel,
   * build_joinrel_tlist, and baserestrictcost is not used for join rels.
   */
  void
@@ -290,7 +290,7 @@ index b54cf34a8e..d3234ae683 100644
  {
  	rel->rows = calc_joinrel_size_estimate(root,
  										   rel,
-@@ -5021,6 +5118,35 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+@@ -5018,6 +5115,35 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
   * get_parameterized_joinrel_size
   *		Make a size estimate for a parameterized scan of a join relation.
   *
@@ -326,7 +326,7 @@ index b54cf34a8e..d3234ae683 100644
   * 'rel' is the joinrel under consideration.
   * 'outer_path', 'inner_path' are (probably also parameterized) Paths that
   *		produce the relations being joined.
-@@ -5033,11 +5159,11 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+@@ -5030,11 +5156,11 @@ set_joinrel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
   * set_joinrel_size_estimates must have been applied already.
   */
  double
@@ -343,7 +343,7 @@ index b54cf34a8e..d3234ae683 100644
  {
  	double		nrows;
  
-@@ -5753,7 +5879,7 @@ set_foreign_size_estimates(PlannerInfo *root, RelOptInfo *rel)
+@@ -5750,7 +5876,7 @@ set_foreign_size_estimates(PlannerInfo *root, RelOptInfo *rel)
  	/* Should only be applied to base relations */
  	Assert(rel->relid > 0);
  
@@ -352,7 +352,7 @@ index b54cf34a8e..d3234ae683 100644
  
  	cost_qual_eval(&rel->baserestrictcost, rel->baserestrictinfo, root);
  
-@@ -6039,7 +6165,7 @@ page_size(double tuples, int width)
+@@ -6036,7 +6162,7 @@ page_size(double tuples, int width)
   * Estimate the fraction of the work that each worker will do given the
   * number of workers budgeted for the path.
   */
@@ -393,7 +393,7 @@ index d3f8639a40..f18e1c1a54 100644
  
  /*
 diff --git a/src/backend/optimizer/plan/planner.c b/src/backend/optimizer/plan/planner.c
-index 1868c4eff4..100b0051a2 100644
+index 86816ffe19..3f9db9a365 100644
 --- a/src/backend/optimizer/plan/planner.c
 +++ b/src/backend/optimizer/plan/planner.c
 @@ -143,7 +143,8 @@ static List *extract_rollup_sets(List *groupingSets);
@@ -540,18 +540,19 @@ index e105a4d5f1..d821ea63bd 100644
  
  	return ppi;
 diff --git a/src/backend/utils/adt/selfuncs.c b/src/backend/utils/adt/selfuncs.c
-index 0c8c05f6c2..eba4d982b9 100644
+index 0c8c05f6c2..1da3395e8a 100644
 --- a/src/backend/utils/adt/selfuncs.c
 +++ b/src/backend/utils/adt/selfuncs.c
-@@ -143,6 +143,7 @@
+@@ -143,6 +143,8 @@
  /* Hooks for plugins to get control when we ask for stats */
  get_relation_stats_hook_type get_relation_stats_hook = NULL;
  get_index_stats_hook_type get_index_stats_hook = NULL;
 +estimate_num_groups_hook_type estimate_num_groups_hook = NULL;
++index_fetch_estimation_hook_type index_fetch_estimation_hook = NULL;
  
  static double eqsel_internal(PG_FUNCTION_ARGS, bool negate);
  static double eqjoinsel_inner(Oid opfuncoid, Oid collation,
-@@ -3293,6 +3294,20 @@ add_unique_group_var(PlannerInfo *root, List *varinfos,
+@@ -3293,6 +3295,20 @@ add_unique_group_var(PlannerInfo *root, List *varinfos,
  	return varinfos;
  }
  
@@ -572,6 +573,26 @@ index 0c8c05f6c2..eba4d982b9 100644
  /*
   * estimate_num_groups		- Estimate number of groups in a grouped query
   *
+@@ -6404,12 +6420,18 @@ genericcostestimate(PlannerInfo *root,
+ 											  JOIN_INNER,
+ 											  NULL);
+ 
++	numIndexTuples = costs->numIndexTuples;
++	if (index_fetch_estimation_hook)
++		/* Allow an extension to correct estimations. */
++		(*index_fetch_estimation_hook)(path, selectivityQuals,
++									   &numIndexTuples,
++									   &indexSelectivity);
++
+ 	/*
+ 	 * If caller didn't give us an estimate, estimate the number of index
+ 	 * tuples that will be visited.  We do it in this rather peculiar-looking
+ 	 * way in order to get the right answer for partial indexes.
+ 	 */
+-	numIndexTuples = costs->numIndexTuples;
+ 	if (numIndexTuples <= 0.0)
+ 	{
+ 		numIndexTuples = indexSelectivity * index->rel->tuples;
 diff --git a/src/include/commands/explain.h b/src/include/commands/explain.h
 index e94d9e49cf..49236ced77 100644
 --- a/src/include/commands/explain.h
@@ -763,13 +784,14 @@ index bf1adfc52a..9c78e0f4e0 100644
   * prototypes for plan/planmain.c
   */
 diff --git a/src/include/utils/selfuncs.h b/src/include/utils/selfuncs.h
-index 9dd444e1ff..b0b5a65618 100644
+index 9dd444e1ff..7e254afda6 100644
 --- a/src/include/utils/selfuncs.h
 +++ b/src/include/utils/selfuncs.h
-@@ -144,6 +144,13 @@ typedef bool (*get_index_stats_hook_type) (PlannerInfo *root,
+@@ -144,7 +144,18 @@ typedef bool (*get_index_stats_hook_type) (PlannerInfo *root,
  										   AttrNumber indexattnum,
  										   VariableStatData *vardata);
  extern PGDLLIMPORT get_index_stats_hook_type get_index_stats_hook;
+-
 +typedef double (*estimate_num_groups_hook_type) (PlannerInfo *root,
 +												 List *groupExprs,
 +												 Path *subpath,
@@ -777,10 +799,15 @@ index 9dd444e1ff..b0b5a65618 100644
 +												 List **pgset,
 +												 EstimationInfo *estinfo);
 +extern PGDLLIMPORT estimate_num_groups_hook_type estimate_num_groups_hook;
- 
++typedef void (*index_fetch_estimation_hook_type)(IndexPath *path,
++												 List *quals,
++												 double *numIndexTuples,
++												 Selectivity *selectivity);
++extern PGDLLIMPORT index_fetch_estimation_hook_type index_fetch_estimation_hook;
  /* Functions in selfuncs.c */
  
-@@ -210,6 +217,9 @@ extern void mergejoinscansel(PlannerInfo *root, Node *clause,
+ extern void examine_variable(PlannerInfo *root, Node *node, int varRelid,
+@@ -210,6 +221,9 @@ extern void mergejoinscansel(PlannerInfo *root, Node *clause,
  							 Selectivity *leftstart, Selectivity *leftend,
  							 Selectivity *rightstart, Selectivity *rightend);
  

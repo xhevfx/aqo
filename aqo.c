@@ -222,6 +222,7 @@ _PG_init(void)
 	create_upper_paths_hook						= aqo_store_upper_signature_hook;
 	prev_estimate_num_groups_hook				= estimate_num_groups_hook;
 	estimate_num_groups_hook					= aqo_estimate_num_groups_hook;
+	index_fetch_estimation_hook					= aqo_index_fetch_estimation_hook;
 
 	init_deactivated_queries_storage();
 	AQOMemoryContext = AllocSetContextCreate(TopMemoryContext,

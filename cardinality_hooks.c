@@ -485,3 +485,16 @@ aqo_estimate_num_groups_hook(PlannerInfo *root, List *groupExprs,
 default_estimator:
 	return estimate_num_groups(root, groupExprs, input_rows, pgset, estinfo);
 }
+
+void
+aqo_index_fetch_estimation_hook(IndexPath *path, List *quals,
+								double *numIndexTuples,
+								Selectivity *selectivity)
+{
+	if (!query_context.use_aqo)
+		return;
+
+	/* Don't do prediction. */
+//	elog(WARNING, "Quals: %d, Selectivity: %lf",
+//		list_length(quals), *selectivity);
+}
