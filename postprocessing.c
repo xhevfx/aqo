@@ -47,7 +47,6 @@ static char *PlanStateInfo = "PlanStateInfo";
 
 /* Query execution statistics collecting utilities */
 static void atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
-								  double **matrix, double *targets,
 								  double *features, double target,
 								  List *relids);
 static bool learnOnPlanState(PlanState *p, void *context);
@@ -81,15 +80,20 @@ static void RemoveFromQueryEnv(QueryDesc *queryDesc);
  */
 static void
 atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
-					 double **matrix, double *targets,
-					 double *features, double target,
-					 List *relids)
+					  double *features, double target, List *relids)
 {
 	LOCKTAG	tag;
 	int		nrows;
+	int64	i;
+	double	*matrix[aqo_K];
+	double	targets[aqo_K];
 
 	init_lock_tag(&tag, (uint32) fhash, (uint32) fss_hash);
 	LockAcquire(&tag, ExclusiveLock, false, false);
+
+	if (ncols > 0)
+		for (i = 0; i < aqo_K; ++i)
+			matrix[i] = palloc(sizeof(double) * ncols);
 
 	if (!load_fss(fhash, fss_hash, ncols, matrix, targets, &nrows, NULL))
 		nrows = 0;
@@ -97,7 +101,52 @@ atomic_fss_learn_step(int fhash, int fss_hash, int ncols,
 	nrows = OkNNr_learn(nrows, ncols, matrix, targets, features, target);
 	update_fss(fhash, fss_hash, nrows, ncols, matrix, targets, relids);
 
+	if (ncols > 0)
+		for (i = 0; i < aqo_K; ++i)
+			pfree(matrix[i]);
+
 	LockRelease(&tag, ExclusiveLock, false);
+}
+
+static void
+learn_scan_sample(AQOPlanNode *aqo_node, ScanState *ss, double true_cardinality)
+{
+	double fetched_rows;
+	double nloops = ss->ps.instrument->nloops;
+	double nf1 = ss->ps.instrument->nfiltered1;
+	double nf2 = ss->ps.instrument->nfiltered2;
+	List *selectivities;
+	int nfeatures;
+	double *features;
+	int fss;
+
+	/* Check for invariants. */
+	Assert(!ss->ps.righttree);
+	Assert(IsA(&ss->ps, BitmapHeapScanState) || !ss->ps.lefttree);
+	Assert(list_length(aqo_node->relids) == 1);
+	Assert(ss->ss_currentRelation != NULL);
+	Assert(nloops >= 1.);
+
+	if (list_length(aqo_node->filter_clauses) == 0)
+		/* Filter doesn't exists. Nothing to learn. */
+		return;
+
+	/* Compute number of fetched tuples. */
+	fetched_rows = (nf1 + nf2) / nloops + true_cardinality;
+
+	/* Compute a class signature for the knowledge */
+	selectivities = restore_selectivities(aqo_node->filter_clauses,
+										  aqo_node->relids,
+										  aqo_node->jointype,
+										  aqo_node->was_parametrized);
+	fss = get_fss_for_object(aqo_node->relids, aqo_node->filter_clauses,
+							 selectivities, &nfeatures, &features);
+	atomic_fss_learn_step(query_context.fspace_hash, fss,
+						  nfeatures, features,
+						  log(true_cardinality), aqo_node->relids);
+
+	elog(WARNING, "[%d] AQO Scan %d. fetched = %lf, features = %d",
+		fss, ss->ps.type, fetched_rows, nfeatures);
 }
 
 static void
@@ -107,11 +156,8 @@ learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
 	int fhash = query_context.fspace_hash;
 	int child_fss;
 	int fss;
-	double target;
-	double	*matrix[aqo_K];
-	double	targets[aqo_K];
+	double target = log(true_cardinality);
 	AQOPlanNode *aqo_node = get_aqo_plan_node(plan, false);
-	int i;
 
 	/*
 	 * Learn 'not executed' nodes only once, if no one another knowledge exists
@@ -120,16 +166,11 @@ learn_agg_sample(List *clauselist, List *selectivities, List *relidslist,
 	if (notExecuted && aqo_node->prediction > 0)
 		return;
 
-	target = log(true_cardinality);
 	child_fss = get_fss_for_object(relidslist, clauselist, NIL, NULL, NULL);
 	fss = get_grouped_exprs_hash(child_fss, aqo_node->grouping_exprs);
 
-	for (i = 0; i < aqo_K; i++)
-		matrix[i] = NULL;
 	/* Critical section */
-	atomic_fss_learn_step(fhash, fss,
-						  0, matrix, targets, NULL, target,
-						  relidslist);
+	atomic_fss_learn_step(fhash, fss, 0, NULL, target, relidslist);
 	/* End of critical section */
 }
 
@@ -142,18 +183,15 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 			 double true_cardinality, Plan *plan, bool notExecuted)
 {
 	int		fhash = query_context.fspace_hash;
-	int		fss_hash;
+	int		fss;
 	int		nfeatures;
-	double	*matrix[aqo_K];
-	double	targets[aqo_K];
 	double	*features;
 	double	target;
-	int		i;
 	AQOPlanNode *aqo_node = get_aqo_plan_node(plan, false);
 
 	target = log(true_cardinality);
-	fss_hash = get_fss_for_object(relidslist, clauselist,
-								  selectivities, &nfeatures, &features);
+	fss = get_fss_for_object(relidslist, clauselist,
+										selectivities, &nfeatures, &features);
 
 	/* Only Agg nodes can have non-empty a grouping expressions list. */
 	Assert(!IsA(plan, Agg) || aqo_node->grouping_exprs != NIL);
@@ -166,28 +204,18 @@ learn_sample(List *clauselist, List *selectivities, List *relidslist,
 		return;
 
 	if (aqo_log_ignorance && aqo_node->prediction <= 0 &&
-		load_fss(fhash, fss_hash, 0, NULL, NULL, NULL, NULL) )
+		load_fss(fhash, fss, 0, NULL, NULL, NULL, NULL) )
 	{
 		/*
 		 * If ignorance logging is enabled and the feature space was existed in
 		 * the ML knowledge base, log this issue.
 		 */
-		update_ignorance(query_context.query_hash, fhash, fss_hash, plan);
+		update_ignorance(query_context.query_hash, fhash, fss, plan);
 	}
 
-	if (nfeatures > 0)
-		for (i = 0; i < aqo_K; ++i)
-			matrix[i] = palloc(sizeof(double) * nfeatures);
-
 	/* Critical section */
-	atomic_fss_learn_step(fhash, fss_hash,
-						  nfeatures, matrix, targets, features, target,
-						  relidslist);
+	atomic_fss_learn_step(fhash, fss, nfeatures, features, target, relidslist);
 	/* End of critical section */
-
-	if (nfeatures > 0)
-		for (i = 0; i < aqo_K; ++i)
-			pfree(matrix[i]);
 
 	pfree(features);
 }
@@ -311,6 +339,26 @@ learn_subplan_recurse(PlanState *p, aqo_obj_stat *ctx)
 	p->subPlan = saved_subplan_list;
 	p->initPlan = saved_initplan_list;
 	return false;
+}
+
+static bool
+IsScanPlanStateNode(PlanState *ps)
+{
+	bool result;
+
+	switch (ps->type)
+	{
+	case T_SeqScanState:
+	case T_IndexScanState:
+	case T_IndexOnlyScanState:
+	case T_BitmapHeapScanState:
+		result = true;
+		break;
+	default:
+		result = false;
+	}
+
+	return result;
 }
 
 /*
@@ -471,6 +519,9 @@ learnOnPlanState(PlanState *p, void *context)
 				else
 					learn_sample(SubplanCtx.clauselist, SubplanCtx.selectivities,
 							 aqo_node->relids, learn_rows, p->plan, notExecuted);
+
+				if (IsScanPlanStateNode(p) && !notExecuted)
+					learn_scan_sample(aqo_node, (ScanState *) p, learn_rows);
 			}
 		}
 	}

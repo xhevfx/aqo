@@ -24,6 +24,9 @@ typedef struct AQOPlanNode
 	/* Grouping expressions from a target list. */
 	List		*grouping_exprs;
 
+	/* Clauses, defines a scan filter. */
+	List		*filter_clauses;
+
 	JoinType	jointype;
 	int			parallel_divisor;
 	bool		was_parametrized;

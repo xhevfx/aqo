@@ -34,6 +34,7 @@ static AQOPlanNode DefaultAQOPlanNode =
 	.clauses = NIL,
 	.selectivities = NIL,
 	.grouping_exprs = NIL,
+	.filter_clauses = NIL,
 	.jointype = -1,
 	.parallel_divisor = -1,
 	.was_parametrized = false,
@@ -424,8 +425,9 @@ AQOnodeCopy(struct ExtensibleNode *enew, const struct ExtensibleNode *eold)
 	/* These lists couldn't contain AQO nodes. Use basic machinery */
 	new->relids = copyObject(old->relids);
 	new->clauses = copyObject(old->clauses);
-	new->grouping_exprs = copyObject(old->grouping_exprs);
 	new->selectivities = copyObject(old->selectivities);
+	new->grouping_exprs = copyObject(old->grouping_exprs);
+	new->filter_clauses = copyObject(old->filter_clauses);
 	enew = (ExtensibleNode *) new;
 }
 
@@ -467,6 +469,7 @@ AQOnodeOut(struct StringInfoData *str, const struct ExtensibleNode *enode)
 	WRITE_NODE_FIELD(clauses);
 	WRITE_NODE_FIELD(selectivities);
 	WRITE_NODE_FIELD(grouping_exprs);
+	WRITE_NODE_FIELD(filter_clauses);
 
 	WRITE_ENUM_FIELD(jointype, JoinType);
 	WRITE_INT_FIELD(parallel_divisor);
@@ -520,6 +523,7 @@ AQOnodeRead(struct ExtensibleNode *enode)
 	READ_NODE_FIELD(clauses);
 	READ_NODE_FIELD(selectivities);
 	READ_NODE_FIELD(grouping_exprs);
+	READ_NODE_FIELD(filter_clauses);
 
 	READ_ENUM_FIELD(jointype, JoinType);
 	READ_INT_FIELD(parallel_divisor);
